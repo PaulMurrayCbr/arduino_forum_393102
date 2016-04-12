@@ -108,6 +108,7 @@ class StrandController {
 
     void setup() {
       strand.begin();
+      on();
     }
 
     void loop() {
