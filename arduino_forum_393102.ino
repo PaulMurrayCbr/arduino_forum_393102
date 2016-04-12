@@ -227,13 +227,6 @@ StrandControllerButton b12(s12, 4), b11(s11, 5), b10(s10, 5), b9(s9, 6);
 void setup() {
   // put your setup code here, to run once:
 
-  Serial.begin(57600);
-  while (!Serial);
-
-  Serial.print(" nEffects is ");
-  Serial.print(nEffects);
-  Serial.println();
-
   s12.setup();
   s11.setup();
   s10.setup();
