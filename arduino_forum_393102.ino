@@ -1,7 +1,7 @@
 /*
- *  For Bigbroncodiver at http://forum.arduino.cc/index.php?topic=393102.0
- * 
- * 
+    For Bigbroncodiver at http://forum.arduino.cc/index.php?topic=393102.0
+
+
    Copyright (c) Paul Murray, 2016. Released into the public domain
    under the unlicense http://unlicense.org .
 */
@@ -11,9 +11,9 @@
 
 #include "DebounceInput.h"
 
-// a Button is constructed on a pin. I knows about clinks=, double clicks, and long clicks.
+// -------------- BUTTONS -----------------------
 
-class Button : DebouncedInput {
+class Button : DebouncedAnalogInput {
 
     const unsigned long LONG_CLICK_ms = 500;
     const unsigned long DCLICK_ms = 250;
@@ -23,7 +23,7 @@ class Button : DebouncedInput {
     boolean clickfired;
 
   public:
-    Button(int pin) : DebouncedInput(pin)  {}
+    Button(int pin) : DebouncedAnalogInput(pin)  {}
 
     virtual void onClick(int) {}
     virtual void onLongClick(int) {}
@@ -50,26 +50,39 @@ class Button : DebouncedInput {
     }
 };
 
-class StrandController;
+// -------------- UTILITY CLASS -----------------------
+
+template <class T>
+class SimpleList {
+  public:
+    T *list[20];
+    int n = 0;
+    void add(T *t) {
+      if (n < 20) list[n++] = t;
+    }
+};
+
+// -------------- EFFECTS AND CONTROLLERS -----------------------
+
+
 class Effect;
+class StrandEffect;
+class RGBEffect;
 
+template <class E>
+class Controller;
+class StrandController;
+class RGBController;
 
-int nEffects;
-Effect *effects[20]; // this needs to be big enbough for the effect singletons
-void register_effect(Effect *e) {
-  effects[nEffects++] = e;
-}
-
+SimpleList<StrandEffect> strandEffects;
+SimpleList<RGBEffect> rgbEffects;
 
 class Effect
 {
   public:
-    Effect() {
-      register_effect(this);
-    }
-    virtual void start(StrandController *controller) {}
-    virtual void loop(StrandController *controller) {}
-    virtual void stop(StrandController *controller) {}
+    virtual void start(Controller<Effect> *controller) {}
+    virtual void loop(Controller<Effect> *controller) {}
+    virtual void stop(Controller<Effect> *controller) {}
 
 
     // Input a value 0 to 255 to get a color value.
@@ -88,12 +101,30 @@ class Effect
     }
 };
 
-
-class StrandController {
-
+class StrandEffect: public Effect {
   public:
-    Adafruit_NeoPixel strand;
+    StrandEffect() {
+      strandEffects.add(this);
+    }
+
+};
+
+class RGBEffect: public Effect {
+  public:
+    RGBEffect() {
+      rgbEffects.add(this);
+    }
+};
+
+template <class E>
+class Controller {
+  public:
+    SimpleList<E> &effects;
     int currentEffect = 0;
+
+    Controller(SimpleList<E> &effects) :
+      effects(effects)
+    { }
 
     // these variables are a scratchpad area for the various effects. HOw they are used
     // is defined by the effect. prev_ms and ms are maintained by the loop method here, but are
@@ -103,61 +134,87 @@ class StrandController {
     unsigned long time[10];
     unsigned n[10];
     float f[10];
+    void  *p[10];
     boolean isOn = false;
 
-    StrandController(int strandSize, int strandPin) :
-      strand(strandSize, strandPin, NEO_GRB + NEO_KHZ800) {
-    }
-
     void setup() {
-      strand.begin();
       on();
     }
 
-    void loop() {
+    virtual void loop() {
       if (!isOn) return;
       ms = millis();
-      effects[currentEffect]->loop(this);
+      effects.list[currentEffect]->loop((Controller<Effect> *)this);
       prev_ms = ms;
     }
 
-    void off() {
+    virtual void off() {
       if (!isOn) return;
       ms = prev_ms = millis();
-      effects[currentEffect]->stop(this);
+      effects.list[currentEffect]->stop((Controller<Effect> *)this);
       isOn = false;
-      strand.clear();
-      strand.show();
     }
 
-    void on() {
+    virtual void on() {
       if (isOn) return;
       ms = prev_ms = millis();
-      effects[currentEffect]->start(this);
+      effects.list[currentEffect]->start((Controller<Effect> *)this);
       isOn = true;
     }
 
-    void next() {
+    virtual void next() {
       if (isOn) {
-        effects[currentEffect]->stop(this);
+        effects.list[currentEffect]->stop((Controller<Effect> *)this);
       }
-      if (++currentEffect >= nEffects) {
+      if (++currentEffect >= effects.n) {
         currentEffect = 0;
       }
-      strand.clear();
-      strand.show();
       if (isOn) {
-        effects[currentEffect]->start(this);
+        effects.list[currentEffect]->start((Controller<Effect> *)this);
       }
       prev_ms = ms = millis();
     }
 
 };
 
-class StrandControllerButton: Button {
-    StrandController &controller;
+
+class StrandController: public Controller<StrandEffect> {
+  public:
+    Adafruit_NeoPixel strand;
+
+    StrandController(int strandSize, int strandPin) :
+      Controller(strandEffects),
+      strand(strandSize, strandPin, NEO_GRB + NEO_KHZ800) {
+    }
+
+    void setup() {
+      Controller::setup();
+      strand.begin();
+    }
+
+    void off() {
+      if (!isOn) return;
+      strand.clear();
+      strand.show();
+      Controller::off();
+    }
+
+    void next() {
+      if (!isOn) {
+        return;
+      }
+      strand.clear();
+      strand.show();
+      Controller::next();
+    }
+
+};
+
+template <class E>
+class ControllerButton: Button {
+    Controller<E> &controller;
   public :
-    StrandControllerButton(StrandController &controller, int pin) :
+    ControllerButton(Controller<E> &controller, int pin) :
       Button(pin), controller(controller) {
     }
 
@@ -179,7 +236,10 @@ class StrandControllerButton: Button {
     }
 };
 
-class Point : Effect {
+// -------------- IMPLEMENTATION OF VARIOUS FUN EFFECTS -----------------------
+
+
+class Point : StrandEffect {
   public:
     void start(StrandController *controller) {}
     void stop(StrandController *controller) {}
@@ -198,7 +258,7 @@ class Point : Effect {
 
 } point;
 
-class Rainbow : Effect {
+class Rainbow : StrandEffect {
   public:
     void start(StrandController *controller) {}
     void stop(StrandController *controller) {}
@@ -207,8 +267,8 @@ class Rainbow : Effect {
     void loop(StrandController *controller) {
       int t =  (controller->ms ) & 255;
 
-      for(int i = 0; i<controller->strand.numPixels(); i++) {
-        controller->strand.setPixelColor(i, wheel(controller->strand,  ( (i*256/controller->strand.numPixels())+t) & 255));
+      for (int i = 0; i < controller->strand.numPixels(); i++) {
+        controller->strand.setPixelColor(i, wheel(controller->strand,  ( (i * 256 / controller->strand.numPixels()) + t) & 255));
       }
 
       controller->strand.show();
@@ -216,13 +276,19 @@ class Rainbow : Effect {
 
 } rainbow;
 
+// -------------- PINOUT -----------------------
+
+
 // atttach my four neopixel rings to pins 12-9. Two of my rings are 24-led, and two are 16 led
 
 StrandController s12(24, 12), s11(24, 11), s10(16, 10), s9(16, 9);
 
 // attach my three buttons. I will run strips 11 and 10 both off button 5.
 
-StrandControllerButton b12(s12, 4), b11(s11, 5), b10(s10, 5), b9(s9, 6);
+ControllerButton<StrandEffect> b12(s12, 4), b11(s11, 5), b10(s10, 5), b9(s9, 6);
+
+// -------------- main loop -----------------------
+
 
 void setup() {
   // put your setup code here, to run once:
