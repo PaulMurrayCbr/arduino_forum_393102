@@ -141,7 +141,7 @@ DebouncedAnalogInput::DebouncedAnalogInput(int pin) {
 
 void DebouncedAnalogInput::attach(int pin) {
     this->pin = pin;
-    reset(analogRead(pin) >= 16);
+    reset(analogRead(pin) >= 128);
 }
 
 void DebouncedAnalogInput::detach() {
@@ -155,7 +155,7 @@ boolean DebouncedAnalogInput::attached() {
 
 boolean DebouncedAnalogInput::read() {
     if(pin == 255) return false;
-    addSampleRateLimited(analogRead(pin) >= 16);
+    addSampleRateLimited(analogRead(pin) >= 128);
     return (filter & OUTPUT_MASK) != 0;
 }
 

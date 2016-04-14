@@ -15,7 +15,7 @@
 
 // -------------- BUTTONS -----------------------
 
-class Button : DebouncedAnalogInput {
+class Button : DebouncedInput {
 
     const unsigned long LONG_CLICK_ms = 500;
     const unsigned long DCLICK_ms = 250;
@@ -25,7 +25,7 @@ class Button : DebouncedAnalogInput {
     boolean clickfired;
 
   public:
-    Button(int pin) : DebouncedAnalogInput(pin)  {}
+    Button(int pin) : DebouncedInput(pin)  {}
 
     virtual void onClick(int) {}
     virtual void onLongClick(int) {}
@@ -211,7 +211,7 @@ class Controller {
     unsigned n[5];
     float f[5];
     void  *p[5];
-    
+
     boolean isOn = false;
     boolean isInitialized = false;
 
@@ -289,6 +289,50 @@ class Controller {
 
 };
 
+
+class RGBController: public Controller<RGBEffect> {
+  public:
+    int rPin, gPin, bPin;
+
+
+    RGBController(int rPin, int gPin, int bPin) :
+      Controller(rgbEffects),
+      rPin(rPin), gPin(gPin), bPin(bPin)
+    {
+    }
+
+    void setup() {
+      pinMode(rPin, OUTPUT);
+      pinMode(gPin, OUTPUT);
+      pinMode(bPin, OUTPUT);
+
+#ifdef DEBUG
+      Serial.print("RgbController ");
+      Serial.print((int)this);
+      Serial.print(".setup()");
+      Serial.println();
+#endif
+    }
+
+
+    virtual void off() {
+      if (!isOn) return;
+      // common anode - 255 is off
+      analogWrite(rPin, 255);
+      analogWrite(gPin, 255);
+      analogWrite(bPin, 255);
+      Controller::off();
+    }
+
+    virtual void next() {
+      // common anode - 255 is off
+      analogWrite(rPin, 255);
+      analogWrite(gPin, 255);
+      analogWrite(bPin, 255);
+      Controller::next();
+    }
+
+};
 
 class StrandController: public Controller<StrandEffect> {
   public:
@@ -420,14 +464,47 @@ class Rainbow : StrandEffect {
 
 } rainbow;
 
+class LedRainbow : RGBEffect {
+  public:
+    LedRainbow() : RGBEffect(default_set_up, default_start, (void (*)(Controller<Effect>*)) LedRainbow::loop, default_stop, default_tear_down) {
+    }
+
+    static  void loop(RGBController *controller) {
+      float t =  (controller->ms ) / 333;
+
+      analogWrite(controller->rPin, (byte) ((sin(t + 0.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * 255.99));
+      analogWrite(controller->gPin, (byte) ((sin(t + 1.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * 255.99));
+      analogWrite(controller->bPin, (byte) ((sin(t + 2.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * 255.99));
+    }
+} ledRainbow;
+
+class LedFlash : RGBEffect {
+  public:
+    LedFlash() : RGBEffect(default_set_up, default_start, (void (*)(Controller<Effect>*)) LedFlash::loop, default_stop, default_tear_down) {
+    }
+
+    static  void loop(RGBController *controller) {
+      int z = (controller->ms / 125)%4;
+      
+      analogWrite(controller->rPin,z==0?0:255);
+      analogWrite(controller->gPin,z==1?0:255);
+      analogWrite(controller->bPin,z==2?0:255);
+
+    }
+
+} ledFlash;
+
+
 // -------------- PINOUT -----------------------
 
 
 // atttach my four neopixel rings to pins 12-9. Two of my rings are 24-led, and two are 16 led
 
 StrandController s12(24, 11); //, s11(24, 11), s10(16, 10), s9(16, 9);
+RGBController led1(3,5,6);
 
-ControllerButton<StrandEffect> b12(s12, 0); //, b11(s11, 1), b10(s10, 2), b9(s9, 6);
+ControllerButton<StrandEffect> analog_0_button(s12, 8);
+ControllerButton<RGBEffect> analog_1_button(led1, 9); 
 
 // -------------- main loop -----------------------
 
@@ -440,9 +517,7 @@ void setup() {
 #endif
 
   s12.setup();
-  //  s11.setup();
-  //  s10.setup();
-  //  s9.setup();
+  led1.setup();
 
 
 }
@@ -451,14 +526,10 @@ void loop() {
   // put your main code here, to run repeatedly:
 
   s12.loop();
-  //  s11.loop();
-  //  s10.loop();
-  //  s9.loop();
+  led1.loop();
 
-  b12.loop();
-  //  b11.loop();
-  //  b10.loop();
-  //  b9.loop();
+  analog_0_button.loop();
+  analog_1_button.loop();
 
 }
 
