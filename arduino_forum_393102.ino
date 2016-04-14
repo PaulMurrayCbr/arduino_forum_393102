@@ -6,6 +6,8 @@
    under the unlicense http://unlicense.org .
 */
 
+#define DEBUG
+
 
 #include <Adafruit_NeoPixel.h>
 
@@ -32,18 +34,33 @@ class Button : DebouncedAnalogInput {
       read();
 
       if (falling()) {
+#ifdef DEBUG
+        Serial.print("Button ");
+        Serial.print((int)this);
+        Serial.println(" falling");
+#endif
         if (millis() - down > DCLICK_ms) clickcount = 0;
         clickcount ++;
         clickfired = false;
         down = millis();
       }
       else if (rising()) {
+#ifdef DEBUG
+        Serial.print("Button ");
+        Serial.print((int)this);
+        Serial.println(" rising");
+#endif
         if (!clickfired) {
           onClick(clickcount);
           clickfired = true;
         }
       }
       else if (low() && !clickfired && millis() - down > LONG_CLICK_ms) {
+#ifdef DEBUG
+        Serial.print("Button ");
+        Serial.print((int)this);
+        Serial.println(" longclick");
+#endif
         onLongClick(clickcount);
         clickfired = true;
       }
@@ -80,14 +97,59 @@ SimpleList<RGBEffect> rgbEffects;
 class Effect
 {
   public:
-    virtual void start(Controller<Effect> *controller) {}
-    virtual void loop(Controller<Effect> *controller) {}
-    virtual void stop(Controller<Effect> *controller) {}
+    void (*set_up)(Controller<Effect> *);
+    void (*start)(Controller<Effect> *);
+    void (*loop)(Controller<Effect> *);
+    void (*stop)(Controller<Effect> *);
+    void (*tear_down)(Controller<Effect> *);
 
+    Effect(
+      void (*set_up)(Controller<Effect> *),
+      void (*start)(Controller<Effect> *),
+      void (*loop)(Controller<Effect> *),
+      void (*stop)(Controller<Effect> *),
+      void (*tear_down)(Controller<Effect> *)) :
+      set_up(set_up), start(start), loop(loop), stop(stop), tear_down(tear_down) {
+    }
+
+    static void default_set_up(Controller<Effect> *controller) {
+#ifdef DEBUG
+      Serial.print("Controller ");
+      Serial.print((int)controller);
+      Serial.println(" set_up() ");
+#endif
+    }
+
+    static void default_start(Controller<Effect> *controller) {
+#ifdef DEBUG
+      Serial.print("Controller ");
+      Serial.print((int)controller);
+      Serial.println(" start() ");
+#endif
+    }
+
+    static void default_loop(Controller<Effect> *controller) {
+    }
+
+    static void default_stop(Controller<Effect> *controller) {
+#ifdef DEBUG
+      Serial.print("Controller ");
+      Serial.print((int)controller);
+      Serial.println(" stop() ");
+#endif
+    }
+
+    static void default_tear_down(Controller<Effect> *controller) {
+#ifdef DEBUG
+      Serial.print("Controller ");
+      Serial.print((int)controller);
+      Serial.println(" tear_down() ");
+#endif
+    }
 
     // Input a value 0 to 255 to get a color value.
     // The colours are a transition r - g - b - back to r.
-    uint32_t wheel(Adafruit_NeoPixel &strip, byte WheelPos) {
+    static uint32_t wheel(Adafruit_NeoPixel &strip, byte WheelPos) {
       WheelPos = 255 - WheelPos;
       if (WheelPos < 85) {
         return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
@@ -103,7 +165,13 @@ class Effect
 
 class StrandEffect: public Effect {
   public:
-    StrandEffect() {
+    StrandEffect(
+      void (*set_up)(Controller<Effect> *),
+      void (*start)(Controller<Effect> *),
+      void (*loop)(Controller<Effect> *),
+      void (*stop)(Controller<Effect> *),
+      void (*tear_down)(Controller<Effect> *)):
+      Effect(set_up, start, loop, stop, tear_down) {
       strandEffects.add(this);
     }
 
@@ -111,7 +179,13 @@ class StrandEffect: public Effect {
 
 class RGBEffect: public Effect {
   public:
-    RGBEffect() {
+    RGBEffect(
+      void (*set_up)(Controller<Effect> *),
+      void (*start)(Controller<Effect> *),
+      void (*loop)(Controller<Effect> *),
+      void (*stop)(Controller<Effect> *),
+      void (*tear_down)(Controller<Effect> *)):
+      Effect(set_up, start, loop, stop, tear_down) {
       rgbEffects.add(this);
     }
 };
@@ -130,49 +204,87 @@ class Controller {
     // is defined by the effect. prev_ms and ms are maintained by the loop method here, but are
     // available to the effects
 
-    unsigned long prev_ms, ms;
-    unsigned long time[10];
-    unsigned n[10];
-    float f[10];
-    void  *p[10];
-    boolean isOn = false;
+    // effect set_up and tear_down allows effects to do things like mallocing space and holding them here
 
-    void setup() {
-      on();
-    }
+    unsigned long prev_ms, ms;
+    unsigned long time[5];
+    unsigned n[5];
+    float f[5];
+    void  *p[5];
+    
+    boolean isOn = false;
+    boolean isInitialized = false;
 
     virtual void loop() {
       if (!isOn) return;
+
       ms = millis();
       effects.list[currentEffect]->loop((Controller<Effect> *)this);
       prev_ms = ms;
     }
 
     virtual void off() {
+#ifdef DEBUG
+      Serial.print("Controller ");
+      Serial.print((int)this);
+      Serial.println(" off");
+#endif
+
       if (!isOn) return;
+
       ms = prev_ms = millis();
       effects.list[currentEffect]->stop((Controller<Effect> *)this);
       isOn = false;
+
+
     }
 
     virtual void on() {
+#ifdef DEBUG
+      Serial.print("Controller ");
+      Serial.print((int)this);
+      Serial.println(" on");
+#endif
+
       if (isOn) return;
+
+      if (!isInitialized) {
+        effects.list[currentEffect]->set_up((Controller<Effect> *)this);
+        isInitialized = true;
+      }
+
       ms = prev_ms = millis();
       effects.list[currentEffect]->start((Controller<Effect> *)this);
       isOn = true;
     }
 
     virtual void next() {
+#ifdef DEBUG
+      Serial.print("Controller ");
+      Serial.print((int)this);
+      Serial.println(" next()");
+#endif
+
       if (isOn) {
         effects.list[currentEffect]->stop((Controller<Effect> *)this);
       }
+
+      if (isInitialized) {
+        effects.list[currentEffect]->tear_down((Controller<Effect> *)this);
+        isInitialized = false;
+      }
+
       if (++currentEffect >= effects.n) {
         currentEffect = 0;
       }
+
       if (isOn) {
+        effects.list[currentEffect]->set_up((Controller<Effect> *)this);
+        isInitialized = true;
         effects.list[currentEffect]->start((Controller<Effect> *)this);
       }
       prev_ms = ms = millis();
+
     }
 
 };
@@ -188,21 +300,33 @@ class StrandController: public Controller<StrandEffect> {
     }
 
     void setup() {
-      Controller::setup();
       strand.begin();
+      strand.clear();
+      strand.show();
+
+#ifdef DEBUG
+      Serial.print("StrandController ");
+      Serial.print((int)this);
+      Serial.print(".setup()");
+      Serial.println();
+#endif
     }
 
-    void off() {
+    virtual void off() {
       if (!isOn) return;
       strand.clear();
       strand.show();
       Controller::off();
     }
 
-    void next() {
-      if (!isOn) {
-        return;
-      }
+    virtual void next() {
+#ifdef DEBUG
+      Serial.print("StrandController ");
+      Serial.print((int)this);
+      Serial.print(".next()");
+      Serial.println();
+#endif
+
       strand.clear();
       strand.show();
       Controller::next();
@@ -223,29 +347,49 @@ class ControllerButton: Button {
     }
 
     void onClick(int) {
+#ifdef DEBUG
+      Serial.print("ControllerButton ");
+      Serial.print((int)this);
+      Serial.println(" click");
+#endif
       controller.next();
     }
 
     void onLongClick(int) {
+#ifdef DEBUG
+      Serial.print("ControllerButton ");
+      Serial.print((int)this);
+      Serial.println(" longclick");
+#endif
+
+#ifdef DEBUG
+      Serial.print("controller.isOn ");
+      Serial.println(controller.isOn);
+#endif
+
       if (controller.isOn) {
         controller.off();
       }
       else {
         controller.on();
       }
+
+#ifdef DEBUG
+      Serial.print("controller.isOn ");
+      Serial.println(controller.isOn);
+#endif
     }
 };
 
 // -------------- IMPLEMENTATION OF VARIOUS FUN EFFECTS -----------------------
 
-
 class Point : StrandEffect {
   public:
-    void start(StrandController *controller) {}
-    void stop(StrandController *controller) {}
+    Point() : StrandEffect(default_set_up, default_start, (void (*)(Controller<Effect>*)) Point::loop, default_stop, default_tear_down) {
+    }
 
     // an extremely simple effect that moves the led along by one every 10th of a second.
-    void loop(StrandController *controller) {
+    static void loop(StrandController *controller) {
       int a = (controller->prev_ms / 100) % controller->strand.numPixels();
       int b = (controller->ms / 100) % controller->strand.numPixels();
 
@@ -260,11 +404,11 @@ class Point : StrandEffect {
 
 class Rainbow : StrandEffect {
   public:
-    void start(StrandController *controller) {}
-    void stop(StrandController *controller) {}
+    Rainbow() : StrandEffect(default_set_up, default_start, (void (*)(Controller<Effect>*)) Rainbow::loop, default_stop, default_tear_down) {
+    }
 
     // an extremely simple effect that moves the led along by one every 10th of a second.
-    void loop(StrandController *controller) {
+    static  void loop(StrandController *controller) {
       int t =  (controller->ms ) & 255;
 
       for (int i = 0; i < controller->strand.numPixels(); i++) {
@@ -281,22 +425,25 @@ class Rainbow : StrandEffect {
 
 // atttach my four neopixel rings to pins 12-9. Two of my rings are 24-led, and two are 16 led
 
-StrandController s12(24, 12), s11(24, 11), s10(16, 10), s9(16, 9);
+StrandController s12(24, 11); //, s11(24, 11), s10(16, 10), s9(16, 9);
 
-// attach my three buttons. I will run strips 11 and 10 both off button 5.
-
-ControllerButton<StrandEffect> b12(s12, 4), b11(s11, 5), b10(s10, 5), b9(s9, 6);
+ControllerButton<StrandEffect> b12(s12, 0); //, b11(s11, 1), b10(s10, 2), b9(s9, 6);
 
 // -------------- main loop -----------------------
 
 
 void setup() {
-  // put your setup code here, to run once:
+#ifdef DEBUG
+  Serial.begin(57600);
+  while (!Serial);
+  Serial.println("\nbegin sketch\n");
+#endif
 
   s12.setup();
-  s11.setup();
-  s10.setup();
-  s9.setup();
+  //  s11.setup();
+  //  s10.setup();
+  //  s9.setup();
+
 
 }
 
@@ -304,14 +451,14 @@ void loop() {
   // put your main code here, to run repeatedly:
 
   s12.loop();
-  s11.loop();
-  s10.loop();
-  s9.loop();
+  //  s11.loop();
+  //  s10.loop();
+  //  s9.loop();
 
   b12.loop();
-  b11.loop();
-  b10.loop();
-  b9.loop();
+  //  b11.loop();
+  //  b10.loop();
+  //  b9.loop();
 
 }
 
