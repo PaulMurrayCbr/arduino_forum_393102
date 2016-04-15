@@ -6,7 +6,7 @@
    under the unlicense http://unlicense.org .
 */
 
-#define DEBUG
+// #define DEBUG
 
 
 #include <Adafruit_NeoPixel.h>
@@ -317,18 +317,16 @@ class RGBController: public Controller<RGBEffect> {
 
     virtual void off() {
       if (!isOn) return;
-      // common anode - 255 is off
-      analogWrite(rPin, 255);
-      analogWrite(gPin, 255);
-      analogWrite(bPin, 255);
+      analogWrite(rPin, 0);
+      analogWrite(gPin, 0);
+      analogWrite(bPin, 0);
       Controller::off();
     }
 
     virtual void next() {
-      // common anode - 255 is off
-      analogWrite(rPin, 255);
-      analogWrite(gPin, 255);
-      analogWrite(bPin, 255);
+      analogWrite(rPin, 0);
+      analogWrite(gPin, 0);
+      analogWrite(bPin, 0);
       Controller::next();
     }
 
@@ -434,8 +432,8 @@ class Point : StrandEffect {
 
     // an extremely simple effect that moves the led along by one every 10th of a second.
     static void loop(StrandController *controller) {
-      int a = (controller->prev_ms / 100) % controller->strand.numPixels();
-      int b = (controller->ms / 100) % controller->strand.numPixels();
+      int a = (controller->prev_ms / 25) % controller->strand.numPixels();
+      int b = (controller->ms / 25) % controller->strand.numPixels();
 
       if (a != b) {
         controller->strand.setPixelColor(a, 0);
@@ -453,7 +451,7 @@ class Rainbow : StrandEffect {
 
     // an extremely simple effect that moves the led along by one every 10th of a second.
     static  void loop(StrandController *controller) {
-      int t =  (controller->ms ) & 255;
+      int t =  (controller->ms /10) & 255;
 
       for (int i = 0; i < controller->strand.numPixels(); i++) {
         controller->strand.setPixelColor(i, wheel(controller->strand,  ( (i * 256 / controller->strand.numPixels()) + t) & 255));
@@ -472,9 +470,9 @@ class LedRainbow : RGBEffect {
     static  void loop(RGBController *controller) {
       float t =  (controller->ms ) / 333;
 
-      analogWrite(controller->rPin, (byte) ((sin(t + 0.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * 255.99));
-      analogWrite(controller->gPin, (byte) ((sin(t + 1.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * 255.99));
-      analogWrite(controller->bPin, (byte) ((sin(t + 2.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * 255.99));
+      analogWrite(controller->rPin, (byte) ((sin(t + 0.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * 250));
+      analogWrite(controller->gPin, (byte) ((sin(t + 1.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * 250));
+      analogWrite(controller->bPin, (byte) ((sin(t + 2.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * 250));
     }
 } ledRainbow;
 
@@ -484,11 +482,11 @@ class LedFlash : RGBEffect {
     }
 
     static  void loop(RGBController *controller) {
-      int z = (controller->ms / 125)%4;
-      
-      analogWrite(controller->rPin,z==0?0:255);
-      analogWrite(controller->gPin,z==1?0:255);
-      analogWrite(controller->bPin,z==2?0:255);
+      int z = (controller->ms / 125) % 4;
+
+      analogWrite(controller->rPin, z == 0 ? 255 : 0);
+      analogWrite(controller->gPin, z == 1 ? 255 : 0);
+      analogWrite(controller->bPin, z == 2 ? 255 : 0);
 
     }
 
@@ -500,11 +498,13 @@ class LedFlash : RGBEffect {
 
 // atttach my four neopixel rings to pins 12-9. Two of my rings are 24-led, and two are 16 led
 
-StrandController s12(24, 11); //, s11(24, 11), s10(16, 10), s9(16, 9);
-RGBController led1(3,5,6);
+StrandController s12(48, 13); //, s11(24, 11), s10(16, 10), s9(16, 9);
+RGBController led1(3, 5, 6);
+RGBController led2(9, 10, 11);
 
-ControllerButton<StrandEffect> analog_0_button(s12, 8);
-ControllerButton<RGBEffect> analog_1_button(led1, 9); 
+ControllerButton<StrandEffect> s12_button(s12, 2);
+ControllerButton<RGBEffect> led1_button(led1, 4);
+ControllerButton<RGBEffect> led2_button(led2, 7);
 
 // -------------- main loop -----------------------
 
@@ -518,6 +518,7 @@ void setup() {
 
   s12.setup();
   led1.setup();
+  led2.setup();
 
 
 }
@@ -527,9 +528,10 @@ void loop() {
 
   s12.loop();
   led1.loop();
-
-  analog_0_button.loop();
-  analog_1_button.loop();
+  led2.loop();
+  s12_button.loop();
+  led1_button.loop();
+  led2_button.loop();
 
 }
 
