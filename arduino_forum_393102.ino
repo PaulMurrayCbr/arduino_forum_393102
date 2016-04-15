@@ -6,7 +6,7 @@
    under the unlicense http://unlicense.org .
 */
 
-// #define DEBUG
+#define DEBUG
 
 
 #include <Adafruit_NeoPixel.h>
@@ -160,6 +160,19 @@ class Effect
       }
       WheelPos -= 170;
       return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+    }
+
+    static uint32_t wheel_v(Adafruit_NeoPixel &strip, byte WheelPos, byte v) {
+      WheelPos = 255 - WheelPos;
+      if (WheelPos < 85) {
+        return strip.Color((255 - WheelPos * 3) * v / 255, 0, (WheelPos * 3) * v / 255);
+      }
+      if (WheelPos < 170) {
+        WheelPos -= 85;
+        return strip.Color(0, (WheelPos * 3) * v / 255, (255 - WheelPos * 3) * v / 255);
+      }
+      WheelPos -= 170;
+      return strip.Color((WheelPos * 3) * v / 255, (255 - WheelPos * 3) * v / 255, 0);
     }
 };
 
@@ -425,20 +438,51 @@ class ControllerButton: Button {
 
 // -------------- IMPLEMENTATION OF VARIOUS FUN EFFECTS -----------------------
 
+const int bassPin = 8;
+
 class Point : StrandEffect {
   public:
-    Point() : StrandEffect(default_set_up, default_start, (void (*)(Controller<Effect>*)) Point::loop, default_stop, default_tear_down) {
+    Point() : StrandEffect((void (*)(Controller<Effect>*)) Point::set_up, default_start, (void (*)(Controller<Effect>*)) Point::loop, default_stop, default_tear_down) {
+    }
+
+    static void set_up(StrandController *controller) {
+      controller->f[0] = 0;
+      controller->f[1] = 1;
     }
 
     // an extremely simple effect that moves the led along by one every 10th of a second.
     static void loop(StrandController *controller) {
-      int a = (controller->prev_ms / 25) % controller->strand.numPixels();
-      int b = (controller->ms / 25) % controller->strand.numPixels();
+      if (controller->prev_ms == controller->ms) return;
 
-      if (a != b) {
-        controller->strand.setPixelColor(a, 0);
-        controller->strand.setPixelColor(b, controller->strand.Color(255, 255, 255));
-        controller->strand.show();
+      int prev = (int) controller->f[0];
+
+      const boolean bass = digitalRead(bassPin) == LOW;
+      const int d = controller->ms - controller->prev_ms;
+
+      if (bass) {
+        controller->f[1] = 30.0;
+      }
+      else {
+        controller->f[1] -= 1;
+        for (int i = 0; i < d; i++)
+          controller->f[1] *= .995;
+        controller->f[1] += 1;
+      }
+
+      controller->f[0] += controller->f[1] / 200;
+      while (controller->f[0] >= controller->strand.numPixels()) {
+        controller->f[0] -= controller->strand.numPixels();
+      }
+      if (controller->f[0] < 0) controller->f[0] = 0;
+
+      int now =  (int) controller->f[0];
+
+      if (prev != now) {
+        for (int i = 0; i < controller->strand.numPixels(); i +=  controller->strand.numPixels() / 2) {
+          controller->strand.setPixelColor((prev)%(controller->strand.numPixels() / 2)+i, 0);
+          controller->strand.setPixelColor((now)%(controller->strand.numPixels() / 2)+i, controller->strand.Color(255, 255, 255));
+          controller->strand.show();
+        }
       }
     }
 
@@ -451,10 +495,11 @@ class Rainbow : StrandEffect {
 
     // an extremely simple effect that moves the led along by one every 10th of a second.
     static  void loop(StrandController *controller) {
-      int t =  (controller->ms /10) & 255;
+      int t =  (controller->ms / 10) & 255;
+      const boolean bass = digitalRead(bassPin) == LOW;
 
       for (int i = 0; i < controller->strand.numPixels(); i++) {
-        controller->strand.setPixelColor(i, wheel(controller->strand,  ( (i * 256 / controller->strand.numPixels()) + t) & 255));
+        controller->strand.setPixelColor(i, wheel_v(controller->strand,  ( (i * 256 / controller->strand.numPixels()) + t) & 255, bass ? 255 : 64));
       }
 
       controller->strand.show();
@@ -470,9 +515,11 @@ class LedRainbow : RGBEffect {
     static  void loop(RGBController *controller) {
       float t =  (controller->ms ) / 333;
 
-      analogWrite(controller->rPin, (byte) ((sin(t + 0.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * 250));
-      analogWrite(controller->gPin, (byte) ((sin(t + 1.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * 250));
-      analogWrite(controller->bPin, (byte) ((sin(t + 2.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * 250));
+      const boolean bass = digitalRead(bassPin) == LOW;
+
+      analogWrite(controller->rPin, (byte) ((sin(t + 0.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * (bass ? 250 : 64)));
+      analogWrite(controller->gPin, (byte) ((sin(t + 1.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * (bass ? 250 : 64)));
+      analogWrite(controller->bPin, (byte) ((sin(t + 2.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * (bass ? 250 : 64)));
     }
 } ledRainbow;
 
@@ -484,9 +531,11 @@ class LedFlash : RGBEffect {
     static  void loop(RGBController *controller) {
       int z = (controller->ms / 125) % 4;
 
-      analogWrite(controller->rPin, z == 0 ? 255 : 0);
-      analogWrite(controller->gPin, z == 1 ? 255 : 0);
-      analogWrite(controller->bPin, z == 2 ? 255 : 0);
+      const boolean bass = digitalRead(bassPin) == LOW;
+
+      analogWrite(controller->rPin, z == 0 ? bass ? 255 : 64  : 0);
+      analogWrite(controller->gPin, z == 1 ? bass ? 255 : 64  : 0);
+      analogWrite(controller->bPin, z == 2 ? bass ? 255 : 64  : 0);
 
     }
 
@@ -494,7 +543,6 @@ class LedFlash : RGBEffect {
 
 
 // -------------- PINOUT -----------------------
-
 
 // atttach my four neopixel rings to pins 12-9. Two of my rings are 24-led, and two are 16 led
 
@@ -520,8 +568,12 @@ void setup() {
   led1.setup();
   led2.setup();
 
+  pinMode(bassPin, INPUT_PULLUP);
+
 
 }
+
+
 
 void loop() {
   // put your main code here, to run repeatedly:
