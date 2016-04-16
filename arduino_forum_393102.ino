@@ -585,8 +585,13 @@ class LedRainbow : RGBEffect {
 } ledRainbow;
 
 class LedFlash : RGBEffect {
+  public:
+    int speed;
+
+    LedFlash(int speed) : speed(speed){}
+  
     void loop(RGBController *controller) {
-      int z = (controller->ms / 125) % 4;
+      int z = (controller->ms / speed) % 4;
 
       const boolean bass = digitalRead(bassPin) == LOW;
 
@@ -596,7 +601,7 @@ class LedFlash : RGBEffect {
 
     }
 
-} ledFlash;
+} slowFlash(500), fastFlash(100);
 
 // -------------- PINOUT -----------------------
 
