@@ -69,6 +69,8 @@ class Button : DebouncedInput {
 
 // -------------- UTILITY CLASS -----------------------
 
+// a simple list stores 20 pointers to whatever.
+
 template <class T>
 class SimpleList {
   public:
@@ -97,22 +99,7 @@ SimpleList<RGBEffect> rgbEffects;
 class Effect
 {
   public:
-    void (*set_up)(Controller<Effect> *);
-    void (*start)(Controller<Effect> *);
-    void (*loop)(Controller<Effect> *);
-    void (*stop)(Controller<Effect> *);
-    void (*tear_down)(Controller<Effect> *);
-
-    Effect(
-      void (*set_up)(Controller<Effect> *),
-      void (*start)(Controller<Effect> *),
-      void (*loop)(Controller<Effect> *),
-      void (*stop)(Controller<Effect> *),
-      void (*tear_down)(Controller<Effect> *)) :
-      set_up(set_up), start(start), loop(loop), stop(stop), tear_down(tear_down) {
-    }
-
-    static void default_set_up(Controller<Effect> *controller) {
+    virtual void set_up(Controller<Effect> *controller) {
 #ifdef DEBUG
       Serial.print("Controller ");
       Serial.print((int)controller);
@@ -120,7 +107,7 @@ class Effect
 #endif
     }
 
-    static void default_start(Controller<Effect> *controller) {
+    virtual void start(Controller<Effect> *controller) {
 #ifdef DEBUG
       Serial.print("Controller ");
       Serial.print((int)controller);
@@ -128,10 +115,9 @@ class Effect
 #endif
     }
 
-    static void default_loop(Controller<Effect> *controller) {
-    }
+    virtual void loop(Controller<Effect> *controller) = 0;
 
-    static void default_stop(Controller<Effect> *controller) {
+    virtual void stop(Controller<Effect> *controller) {
 #ifdef DEBUG
       Serial.print("Controller ");
       Serial.print((int)controller);
@@ -139,7 +125,7 @@ class Effect
 #endif
     }
 
-    static void default_tear_down(Controller<Effect> *controller) {
+    virtual void tear_down(Controller<Effect> *controller) {
 #ifdef DEBUG
       Serial.print("Controller ");
       Serial.print((int)controller);
@@ -176,31 +162,115 @@ class Effect
     }
 };
 
-class StrandEffect: public Effect {
+class StrandEffect: public virtual Effect {
   public:
-    StrandEffect(
-      void (*set_up)(Controller<Effect> *),
-      void (*start)(Controller<Effect> *),
-      void (*loop)(Controller<Effect> *),
-      void (*stop)(Controller<Effect> *),
-      void (*tear_down)(Controller<Effect> *)):
-      Effect(set_up, start, loop, stop, tear_down) {
+    StrandEffect() {
       strandEffects.add(this);
     }
 
+    void set_up(Controller<Effect> *controller) {
+      set_up((StrandController *)controller);
+    }
+
+    void start(Controller<Effect> *controller) {
+      start((StrandController *)controller);
+    }
+
+    void loop(Controller<Effect> *controller) {
+      loop((StrandController *)controller);
+    }
+
+    void stop(Controller<Effect> *controller) {
+      stop((StrandController *)controller);
+    }
+
+    void tear_down(Controller<Effect> *controller) {
+      tear_down((StrandController *)controller);
+    }
+
+    virtual void set_up(StrandController *controller) {
+#ifdef DEBUG      
+      Effect::set_up((Controller<Effect> *)controller);
+#endif      
+    }
+
+    virtual void start(StrandController *controller) {
+#ifdef DEBUG      
+      Effect::start((Controller<Effect> *)controller);
+#endif      
+    }
+
+    virtual void loop(StrandController *controller) = 0;
+
+    virtual void stop(StrandController *controller) {
+#ifdef DEBUG      
+      Effect::stop((Controller<Effect> *)controller);
+#endif      
+    }
+
+    virtual void tear_down(StrandController *controller) {
+#ifdef DEBUG      
+      Effect::tear_down((Controller<Effect> *)controller);
+#endif      
+    }
+
+
+
 };
 
-class RGBEffect: public Effect {
+class RGBEffect: public virtual Effect {
   public:
-    RGBEffect(
-      void (*set_up)(Controller<Effect> *),
-      void (*start)(Controller<Effect> *),
-      void (*loop)(Controller<Effect> *),
-      void (*stop)(Controller<Effect> *),
-      void (*tear_down)(Controller<Effect> *)):
-      Effect(set_up, start, loop, stop, tear_down) {
+    RGBEffect() {
       rgbEffects.add(this);
     }
+
+    
+    void set_up(Controller<Effect> *controller) {
+      set_up((RGBController *)controller);
+    }
+
+    void start(Controller<Effect> *controller) {
+      start((RGBController *)controller);
+    }
+
+    void loop(Controller<Effect> *controller) {
+      loop((RGBController *)controller);
+    }
+
+    void stop(Controller<Effect> *controller) {
+      stop((RGBController *)controller);
+    }
+
+    void tear_down(Controller<Effect> *controller) {
+      tear_down((RGBController *)controller);
+    }
+
+    virtual void set_up(RGBController *controller) {
+#ifdef DEBUG      
+      Effect::set_up((Controller<Effect> *)controller);
+#endif      
+    }
+
+    virtual void start(RGBController *controller) {
+#ifdef DEBUG      
+      Effect::start((Controller<Effect> *)controller);
+#endif      
+    }
+
+    virtual void loop(RGBController *controller) = 0;
+
+    virtual void stop(RGBController *controller) {
+#ifdef DEBUG      
+      Effect::stop((Controller<Effect> *)controller);
+#endif      
+    }
+
+    virtual void tear_down(RGBController *controller) {
+#ifdef DEBUG      
+      Effect::tear_down((Controller<Effect> *)controller);
+#endif      
+    }
+
 };
 
 template <class E>
@@ -442,16 +512,13 @@ const int bassPin = 8;
 
 class Point : StrandEffect {
   public:
-    Point() : StrandEffect((void (*)(Controller<Effect>*)) Point::set_up, default_start, (void (*)(Controller<Effect>*)) Point::loop, default_stop, default_tear_down) {
-    }
-
-    static void set_up(StrandController *controller) {
+    void set_up(StrandController *controller) {
       controller->f[0] = 0;
       controller->f[1] = 1;
     }
 
     // an extremely simple effect that moves the led along by one every 10th of a second.
-    static void loop(StrandController *controller) {
+    void loop(StrandController *controller) {
       if (controller->prev_ms == controller->ms) return;
 
       int prev = (int) controller->f[0];
@@ -479,8 +546,8 @@ class Point : StrandEffect {
 
       if (prev != now) {
         for (int i = 0; i < controller->strand.numPixels(); i +=  controller->strand.numPixels() / 2) {
-          controller->strand.setPixelColor((prev)%(controller->strand.numPixels() / 2)+i, 0);
-          controller->strand.setPixelColor((now)%(controller->strand.numPixels() / 2)+i, controller->strand.Color(255, 255, 255));
+          controller->strand.setPixelColor((prev) % (controller->strand.numPixels() / 2) + i, 0);
+          controller->strand.setPixelColor((now) % (controller->strand.numPixels() / 2) + i, controller->strand.Color(255, 255, 255));
           controller->strand.show();
         }
       }
@@ -490,11 +557,8 @@ class Point : StrandEffect {
 
 class Rainbow : StrandEffect {
   public:
-    Rainbow() : StrandEffect(default_set_up, default_start, (void (*)(Controller<Effect>*)) Rainbow::loop, default_stop, default_tear_down) {
-    }
-
     // an extremely simple effect that moves the led along by one every 10th of a second.
-    static  void loop(StrandController *controller) {
+    void loop(StrandController *controller) {
       int t =  (controller->ms / 10) & 255;
       const boolean bass = digitalRead(bassPin) == LOW;
 
@@ -509,10 +573,7 @@ class Rainbow : StrandEffect {
 
 class LedRainbow : RGBEffect {
   public:
-    LedRainbow() : RGBEffect(default_set_up, default_start, (void (*)(Controller<Effect>*)) LedRainbow::loop, default_stop, default_tear_down) {
-    }
-
-    static  void loop(RGBController *controller) {
+    void loop(RGBController *controller) {
       float t =  (controller->ms ) / 333;
 
       const boolean bass = digitalRead(bassPin) == LOW;
@@ -524,11 +585,7 @@ class LedRainbow : RGBEffect {
 } ledRainbow;
 
 class LedFlash : RGBEffect {
-  public:
-    LedFlash() : RGBEffect(default_set_up, default_start, (void (*)(Controller<Effect>*)) LedFlash::loop, default_stop, default_tear_down) {
-    }
-
-    static  void loop(RGBController *controller) {
+    void loop(RGBController *controller) {
       int z = (controller->ms / 125) % 4;
 
       const boolean bass = digitalRead(bassPin) == LOW;
@@ -540,7 +597,6 @@ class LedFlash : RGBEffect {
     }
 
 } ledFlash;
-
 
 // -------------- PINOUT -----------------------
 
