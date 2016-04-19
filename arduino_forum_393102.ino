@@ -6,7 +6,7 @@
    under the unlicense http://unlicense.org .
 */
 
-#define DEBUG
+// #define DEBUG
 
 
 #include <Adafruit_NeoPixel.h>
