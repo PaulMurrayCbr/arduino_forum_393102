@@ -13,6 +13,9 @@
 
 #include "DebounceInput.h"
 
+const int bassPin = 8;
+const int bassControlPin = 12;
+
 // -------------- BUTTONS -----------------------
 
 class Button : DebouncedInput {
@@ -160,6 +163,46 @@ class Effect
       WheelPos -= 170;
       return strip.Color((WheelPos * 3) * v / 255, (255 - WheelPos * 3) * v / 255, 0);
     }
+
+    static byte wheel_RED(byte WheelPos, byte v) {
+      WheelPos = 255 - WheelPos;
+      if (WheelPos < 85) {
+        return (255 - WheelPos * 3) * v / 255;
+      }
+      if (WheelPos < 170) {
+        WheelPos -= 85;
+        return 0;
+      }
+      WheelPos -= 170;
+      return (WheelPos * 3) * v / 255;
+    }
+
+    static byte wheel_GREEN(byte WheelPos, byte v) {
+      WheelPos = 255 - WheelPos;
+      if (WheelPos < 85) {
+        return 0;
+      }
+      if (WheelPos < 170) {
+        WheelPos -= 85;
+        return (WheelPos * 3) * v / 255;
+      }
+      WheelPos -= 170;
+      return  0;
+    }
+
+    static byte wheel_BLUE(byte WheelPos, byte v) {
+      WheelPos = 255 - WheelPos;
+      if (WheelPos < 85) {
+        return  (WheelPos * 3) * v / 255;
+      }
+      if (WheelPos < 170) {
+        WheelPos -= 85;
+        return  (255 - WheelPos * 3) * v / 255;
+      }
+      WheelPos -= 170;
+      return  0;
+    }
+
 };
 
 class StrandEffect: public virtual Effect {
@@ -189,29 +232,29 @@ class StrandEffect: public virtual Effect {
     }
 
     virtual void set_up(StrandController *controller) {
-#ifdef DEBUG      
+#ifdef DEBUG
       Effect::set_up((Controller<Effect> *)controller);
-#endif      
+#endif
     }
 
     virtual void start(StrandController *controller) {
-#ifdef DEBUG      
+#ifdef DEBUG
       Effect::start((Controller<Effect> *)controller);
-#endif      
+#endif
     }
 
     virtual void loop(StrandController *controller) = 0;
 
     virtual void stop(StrandController *controller) {
-#ifdef DEBUG      
+#ifdef DEBUG
       Effect::stop((Controller<Effect> *)controller);
-#endif      
+#endif
     }
 
     virtual void tear_down(StrandController *controller) {
-#ifdef DEBUG      
+#ifdef DEBUG
       Effect::tear_down((Controller<Effect> *)controller);
-#endif      
+#endif
     }
 
 
@@ -224,7 +267,7 @@ class RGBEffect: public virtual Effect {
       rgbEffects.add(this);
     }
 
-    
+
     void set_up(Controller<Effect> *controller) {
       set_up((RGBController *)controller);
     }
@@ -246,29 +289,29 @@ class RGBEffect: public virtual Effect {
     }
 
     virtual void set_up(RGBController *controller) {
-#ifdef DEBUG      
+#ifdef DEBUG
       Effect::set_up((Controller<Effect> *)controller);
-#endif      
+#endif
     }
 
     virtual void start(RGBController *controller) {
-#ifdef DEBUG      
+#ifdef DEBUG
       Effect::start((Controller<Effect> *)controller);
-#endif      
+#endif
     }
 
     virtual void loop(RGBController *controller) = 0;
 
     virtual void stop(RGBController *controller) {
-#ifdef DEBUG      
+#ifdef DEBUG
       Effect::stop((Controller<Effect> *)controller);
-#endif      
+#endif
     }
 
     virtual void tear_down(RGBController *controller) {
-#ifdef DEBUG      
+#ifdef DEBUG
       Effect::tear_down((Controller<Effect> *)controller);
-#endif      
+#endif
     }
 
 };
@@ -291,12 +334,15 @@ class Controller {
 
     unsigned long prev_ms, ms;
     unsigned long time[5];
-    unsigned n[5];
+    uint8_t n8[5];
+    uint16_t n16[5];
+    uint32_t n32[5];
     float f[5];
     void  *p[5];
 
     boolean isOn = false;
     boolean isInitialized = false;
+    boolean bassActive = false;
 
     virtual void loop() {
       if (!isOn) return;
@@ -370,6 +416,10 @@ class Controller {
 
     }
 
+    void toggleBassActive() {
+      bassActive = !bassActive;
+    }
+
 };
 
 
@@ -424,7 +474,7 @@ class StrandController: public Controller<StrandEffect> {
       strand(strandSize, strandPin, NEO_GRB + NEO_KHZ800) {
     }
 
-    void setup() {
+    virtual void setup() {
       strand.begin();
       strand.clear();
       strand.show();
@@ -477,7 +527,10 @@ class ControllerButton: Button {
       Serial.print((int)this);
       Serial.println(" click");
 #endif
-      controller.next();
+      if (digitalRead(bassControlPin) == LOW)
+        controller.toggleBassActive();
+      else
+        controller.next();
     }
 
     void onLongClick(int) {
@@ -508,9 +561,9 @@ class ControllerButton: Button {
 
 // -------------- IMPLEMENTATION OF VARIOUS FUN EFFECTS -----------------------
 
-const int bassPin = 8;
+/*
 
-class Point : StrandEffect {
+  class Point : StrandEffect {
   public:
     void set_up(StrandController *controller) {
       controller->f[0] = 0;
@@ -553,9 +606,9 @@ class Point : StrandEffect {
       }
     }
 
-} point;
+  } ;
 
-class Rainbow : StrandEffect {
+  class Rainbow : StrandEffect {
   public:
     // an extremely simple effect that moves the led along by one every 10th of a second.
     void loop(StrandController *controller) {
@@ -569,9 +622,9 @@ class Rainbow : StrandEffect {
       controller->strand.show();
     }
 
-} rainbow;
+  } ;
 
-class LedRainbow : RGBEffect {
+  class LedRainbow : RGBEffect {
   public:
     void loop(RGBController *controller) {
       float t =  (controller->ms ) / 333;
@@ -582,14 +635,14 @@ class LedRainbow : RGBEffect {
       analogWrite(controller->gPin, (byte) ((sin(t + 1.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * (bass ? 250 : 64)));
       analogWrite(controller->bPin, (byte) ((sin(t + 2.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * (bass ? 250 : 64)));
     }
-} ledRainbow;
+  } ;
 
-class LedFlash : RGBEffect {
+  class LedFlash : RGBEffect {
   public:
     int speed;
 
-    LedFlash(int speed) : speed(speed){}
-  
+    LedFlash(int speed) : speed(speed) {}
+
     void loop(RGBController *controller) {
       int z = (controller->ms / speed) % 4;
 
@@ -601,15 +654,132 @@ class LedFlash : RGBEffect {
 
     }
 
-} slowFlash(500), fastFlash(100);
+  } ;
+
+*/
+
+
+
+class Rainbow : StrandEffect {
+  public:
+    // an extremely simple effect that moves the led along by one every 10th of a second.
+    void loop(StrandController *controller) {
+      int t =  (controller->ms / 10) & 255;
+      const boolean bass = digitalRead(bassPin) == LOW;
+
+      for (int i = 0; i < controller->strand.numPixels(); i++) {
+        controller->strand.setPixelColor(i, wheel_v(controller->strand,  ( (i * 256 / controller->strand.numPixels()) + t) & 255, !controller->bassActive || bass ? 255 : 64));
+      }
+
+      controller->strand.show();
+    }
+
+} rainbow;
+
+
+class LedColor : RGBEffect {
+    const byte brightRED;
+    const byte brightGREEN;
+    const byte brightBLUE;
+    const byte dimRED;
+    const byte dimGREEN;
+    const byte dimBLUE;
+
+
+  public:
+    LedColor(byte r, byte g, byte b) :
+      brightRED(r), brightGREEN(g), brightBLUE(b),
+      dimRED(r / 4), dimGREEN(g / 4), dimBLUE(b / 4)
+    {}
+
+    void loop(RGBController *controller) {
+      if (controller->bassActive) {
+        const boolean bass = digitalRead(bassPin) == LOW;
+
+        analogWrite(controller->rPin, bass ? brightRED : dimRED);
+        analogWrite(controller->gPin, bass ? brightGREEN : dimGREEN);
+        analogWrite(controller->bPin, bass ? brightBLUE : dimBLUE);
+      }
+      else {
+        analogWrite(controller->rPin, brightRED);
+        analogWrite(controller->gPin, brightGREEN);
+        analogWrite(controller->bPin, brightBLUE);
+      }
+
+    }
+
+}
+rgbColours[] = {
+  // to keep the brighness consistent, make sure everything sums to 256 (or 255)
+  LedColor(255, 0, 0), //red
+  LedColor(255 - 8 - 32, 8, 32), // pink
+  LedColor(192, 64, 0), //orange
+  LedColor(128, 128, 0), //yellow
+  LedColor(64, 192, 0), //yelow green
+  LedColor(0, 128, 128), //cyan
+  LedColor(0, 0, 255), //blue
+  LedColor(128, 0, 128), //magenta
+  LedColor(64, 0, 192), //purple
+};
+       ;
+
+class StrandColor : StrandEffect {
+    byte r, g, b;
+  public:
+    StrandColor(byte r, byte g, byte b) : r(r), g(g), b(b) {}
+
+    virtual void set_up(StrandController *controller) {
+      controller->n32[0] = controller->strand.Color(r, g, b); // bright
+      controller->n32[1] = controller->strand.Color(r / 4, g / 4, b / 4); // dim
+
+      //      StrandEffect::set_up((Controller<Effect> *)controller);
+    }
+
+
+    void loop(StrandController *controller) {
+#ifdef DEBUG
+      Serial.print(controller->n32[0]);
+      Serial.print(' ');
+      Serial.print(controller->n32[1]);
+      Serial.println();
+#endif
+
+      if (controller->bassActive) {
+        const boolean bass = digitalRead(bassPin) == LOW;
+        for (int i = 0; i < controller->strand.numPixels(); i++) {
+          controller->strand.setPixelColor(i, controller->n32[bass ? 0 : 1]);
+        }
+      }
+      else {
+        for (int i = 0; i < controller->strand.numPixels(); i++) {
+          controller->strand.setPixelColor(i, controller->n32[0]);
+        }
+      }
+
+      controller->strand.show();
+    }
+}
+strandColours[] = {
+  // to keep the brighness consistent, make sure everything sums to 256 (or 255)
+  StrandColor(255, 0, 0), //red
+  StrandColor(255 - 8 - 32, 8, 32), // pink
+  StrandColor(192, 64, 0), //orange
+  StrandColor(128, 128, 0), //yellow
+  StrandColor(64, 192, 0), //yelow green
+  StrandColor(0, 128, 128), //cyan
+  StrandColor(0, 0, 255), //blue
+  StrandColor(128, 0, 128), //magenta
+  StrandColor(64, 0, 192), //purple
+};
+
 
 // -------------- PINOUT -----------------------
 
 // atttach my four neopixel rings to pins 12-9. Two of my rings are 24-led, and two are 16 led
 
 StrandController s12(48, 13); //, s11(24, 11), s10(16, 10), s9(16, 9);
-RGBController led1(3, 5, 6);
-RGBController led2(9, 10, 11);
+RGBController led1(3, 6, 5);
+RGBController led2(10, 11, 9);
 
 ControllerButton<StrandEffect> s12_button(s12, 2);
 ControllerButton<RGBEffect> led1_button(led1, 4);
@@ -630,6 +800,7 @@ void setup() {
   led2.setup();
 
   pinMode(bassPin, INPUT_PULLUP);
+  pinMode(bassControlPin, INPUT_PULLUP);
 
 
 }
