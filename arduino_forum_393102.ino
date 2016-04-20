@@ -676,6 +676,19 @@ class Rainbow : StrandEffect {
 
 } rainbow;
 
+class LedRainbow : RGBEffect {
+  public:
+    void loop(RGBController *controller) {
+      float t =  (controller->ms ) / 333;
+
+      const boolean bass = digitalRead(bassPin) == LOW;
+
+      analogWrite(controller->rPin, (byte) ((sin(t + 0.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * (!controller->bassActive || bass ? 255 : 64)));
+      analogWrite(controller->gPin, (byte) ((sin(t + 1.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * (!controller->bassActive || bass ? 255 : 64)));
+      analogWrite(controller->bPin, (byte) ((sin(t + 2.0 / 3.0 * 2.0 * PI) + 1.0) / 2.0 * (!controller->bassActive || bass ? 255 : 64)));
+    }
+} ledRainbow;
+
 
 class LedColor : RGBEffect {
     const byte brightRED;
@@ -721,7 +734,7 @@ rgbColours[] = {
   LedColor(128, 0, 128), //magenta
   LedColor(64, 0, 192), //purple
 };
-       ;
+;
 
 class StrandColor : StrandEffect {
     byte r, g, b;
